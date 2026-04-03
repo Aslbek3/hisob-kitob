@@ -1,52 +1,65 @@
 <?php
-// Database klassini ulaymiz
+// Barcha kerakli fayllarni ulash
+require_once 'vendor/autoload.php';
+require_once 'src/Config.php';
 require_once 'src/Database.php';
+require_once 'src/ExcelExport.php';
 
-// Bot tokeningizni shu yerga yozing
-$botToken = "SIZNING_BOT_TOKENINGIZ"; 
-$apiUrl = "https://api.telegram.org/bot$botToken/";
-
-// Telegramdan kelgan ma'lumotni olish
+// Telegramdan kelgan xabarni olish
 $content = file_get_contents("php://input");
 $update = json_decode($content, true);
 
-if (!$update) {
-    exit; // Agar xabar bo'lmasa, kod to'xtaydi
-}
+if (!$update || !isset($update['message'])) exit;
 
 $message = $update['message'];
 $chatId = $message['chat']['id'];
-$text = $message['text'];
-$firstName = $message['from']['first_name'];
+$text = $message['text'] ?? '';
+$apiUrl = Config::getApiUrl();
 
 $db = new Database();
 
-// Bot buyruqlarini tekshirish
+// --- LOGIKA BOSHLANDI ---
+
 if ($text == '/start') {
-    $javob = "Salom, $firstName! \nMen xarajatlaringizni hisoblayman. \n\nSarfni yozing (masalan: 25000) yoki jami xarajatni ko'rish uchun /jami buyrug'ini bosing.";
-    sendMessage($chatId, $javob, $apiUrl);
+    sendMessage($chatId, "Salom! Men xarajatlaringizni hisoblayman.\n\n- Son yuboring (masalan: 50000)\n- /jami - Jami hisob\n- /export - Excel hisobot", $apiUrl);
 } 
-// Agar foydalanuvchi son (xarajat miqdori) yuborsa
+// Agar foydalanuvchi son yuborsa (xarajat)
 elseif (is_numeric($text)) {
-    $miqdor = (float)$text;
-    $db->addExpense($chatId, $miqdor); // Bazaga user_id bilan saqlash
-    
-    $javob = "✅ $miqdor so'm saqlandi. \nKategoriyani keyinchalik AI orqali aniqlaymiz.";
-    sendMessage($chatId, $javob, $apiUrl);
+    $db->addExpense($chatId, $text);
+    sendMessage($chatId, "✅ $text so'm saqlandi.", $apiUrl);
 } 
-// Jami xarajatni ko'rsatish
+// Jami xarajatni ko'rish
 elseif ($text == '/jami') {
     $total = $db->getTotalAmount($chatId);
-    $javob = "💰 Sizning jami xarajatlaringiz: " . number_format($total, 0, ',', ' ') . " so'm.";
-    sendMessage($chatId, $javob, $apiUrl);
+    sendMessage($chatId, "💰 Jami xarajatlaringiz: " . number_format($total, 0, ',', ' ') . " so'm.", $apiUrl);
 } 
-else {
-    $javob = "Iltimos, xarajat miqdorini son bilan kiriting (masalan: 10000).";
-    sendMessage($chatId, $javob, $apiUrl);
+// Excel fayl qilib yuklab olish
+elseif ($text == '/export') {
+    $data = $db->getUserData($chatId);
+    if (empty($data)) {
+        sendMessage($chatId, "Hozircha ma'lumot yo'q.", $apiUrl);
+    } else {
+        $excel = new ExcelExport();
+        $fileName = $excel->generate($data, $chatId);
+        sendDocument($chatId, $fileName, $apiUrl);
+        unlink($fileName); // Faylni yuborgach, serverdan o'chirish
+    }
 }
 
-// Telegramga xabar yuborish funksiyasi
+// --- FUNKSIYALAR ---
+
 function sendMessage($chatId, $text, $apiUrl) {
-    $url = $apiUrl . "sendMessage?chat_id=$chatId&text=" . urlencode($text);
-    file_get_contents($url);
+    file_get_contents($apiUrl . "sendMessage?chat_id=$chatId&text=" . urlencode($text));
+}
+
+function sendDocument($chatId, $file, $apiUrl) {
+    $post_fields = [
+        'chat_id' => $chatId,
+        'document' => new CURLFile(realpath($file))
+    ];
+    $ch = curl_init($apiUrl . "sendDocument");
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $post_fields);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_exec($ch);
+    curl_close($ch);
 }
