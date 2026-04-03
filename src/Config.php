@@ -5,7 +5,7 @@ class Config {
     const MONGO_URL = 'mongodb+srv://Aslbekhisob:qaszqasz@cluster0.jwmhnil.mongodb.net/?retryWrites=true&w=majority';
 
     // Telegram Bot Token (@BotFather dan olingan)
-    const BOT_TOKEN = 'SIZNING_BOT_TOKENINGIZ';
+    const BOT_TOKEN = '8012951804:AAFPwnaxqa81WwIgKwHrrnhIrMT-uwjQbs4';
 
     // Ma'lumotlar bazasi sozlamalari
     const DB_NAME = 'expens_db';
